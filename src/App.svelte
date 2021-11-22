@@ -41,3 +41,8 @@
     <button on:click={close}>Close First Modal</button>
   </div>
 </Modal>
+<!--
+ hack for focus trap.
+ This is not needed if any other focusable HTML elements exists after the toplevel Modal.
+-->
+<input style="opacity:0;" />
