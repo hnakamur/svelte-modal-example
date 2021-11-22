@@ -15,9 +15,34 @@
       close();
     }
   }
+  function isFocusable(el) {
+    try {
+      el.focus();
+    } catch {}
+    return document.activeElement === el;
+  }
+  function isHidden(el) {
+    const style = window.getComputedStyle(el);
+    return (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      style.opacity === "0"
+    );
+  }
+  function focusFirstChild(modal) {
+    if (modal) {
+      const children = modal.querySelectorAll("*");
+      const child = [...children].find(
+        (el) => isFocusable(el) && !isHidden(el)
+      );
+      // We assert child !== null here since
+      // Modal dialogs should contain at least one focusable element.
+      child.focus();
+    }
+  }
   function transitionend(e) {
     const node = e.target;
-    node.focus();
+    focusFirstChild(node);
   }
   function modalAction(node) {
     const returnFn = [];
@@ -31,14 +56,13 @@
     }
     node.addEventListener("keydown", keydown);
     node.addEventListener("transitionend", transitionend);
-    node.focus();
+    focusFirstChild(node);
     modalList.push(node);
     returnFn.push(() => {
       node.removeEventListener("keydown", keydown);
       node.removeEventListener("transitionend", transitionend);
       modalList.pop();
-      // Optional chaining to guard against empty array.
-      modalList[modalList.length - 1]?.focus();
+      focusFirstChild(modalList[modalList.length - 1]);
     });
     return {
       destroy: () => returnFn.forEach((fn) => fn()),
@@ -51,7 +75,7 @@
   <button on:click={open}>Open</button>
 </slot>
 {#if $isOpen}
-  <div class="modal" use:modalAction tabindex="0">
+  <div class="modal" use:modalAction>
     <div class="backdrop" on:click={close} />
 
     <div class="content-wrapper">
