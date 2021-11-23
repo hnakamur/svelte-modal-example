@@ -1,65 +1,106 @@
-<script context="module">
-  // for passing focus on to the next Modal in the queue.
-  // A module context level object is shared among all its component instances. [Read More Here](https://svelte.dev/tutorial/sharing-code)
-  const modalList = [];
-</script>
-
 <script>
   import { booleanStore } from "./booleanStore";
 
   const store = booleanStore(false);
   const { isOpen, open, close } = store;
-  function keydown(e) {
-    e.stopPropagation();
-    if (e.key === "Escape") {
-      close();
-    }
-  }
-  function focusFirstFocusableDescendant(modal) {
-    if (modal) {
-      // Use '*' here if all tags must be covered, for example `div` with
-      // tabindex attribute. However it increases focus trials before
-      // finding the first focusable element.
-      //
-      // Or add tag type which you use in modals dialogs.
-      for (const el of modal.querySelectorAll(
-        "a, area, button, input, select, textarea, video"
-      )) {
-        try {
-          el.focus();
-        } catch {}
-        if (document.activeElement === el) {
-          break;
+
+  export let focusAfterClosed;
+  let dialogNode;
+  let lastFocus;
+  let ignoresFocusChange;
+
+  function modalAction(node) {
+    // mix of https://github.com/KittyGiraudel/focusable-selectors/blob/799829e3b8c329d679b3b414b5dfcfa257a817cf/index.js
+    // and https://github.com/focus-trap/tabbable/blob/baa8c3044fe0a8fd8c0826f4a3e284872e1467a5/src/index.js#L1-L13
+    const focusableCandidateSelectors =
+      'a[href]:not([tabindex^="-"])' +
+      ',area[href]:not([tabindex^="-"])' +
+      ',input:not([type="hidden"]):not([type="radio"]):not([disabled]):not([tabindex^="-"])' +
+      ',input[type="radio"]:not([disabled]):not([tabindex^="-"])' +
+      ',select:not([disabled]):not([tabindex^="-"])' +
+      ',textarea:not([disabled]):not([tabindex^="-"])' +
+      ',button:not([disabled]):not([tabindex^="-"])' +
+      ',iframe:not([tabindex^="-"])' +
+      ',audio[controls]:not([tabindex^="-"])' +
+      ',video[controls]:not([tabindex^="-"])' +
+      ',[contenteditable]:not([tabindex^="-"])' +
+      ',[tabindex]:not([tabindex^="-"])' +
+      ',details>summary:not([tabindex^="-"])' +
+      ',details:not([tabindex^="-"])';
+
+    // attemptFocus, focusFirstDescendant, focusLastDesendant, trapFocus logic are
+    // ported from https://www.w3.org/TR/wai-aria-practices-1.1/examples/dialog-modal/dialog.html
+
+    const attemptFocus = (element) => {
+      ignoresFocusChange = true;
+      try {
+        element.focus();
+      } catch {}
+      ignoresFocusChange = false;
+      return element === document.activeElement;
+    };
+
+    function focusFirstDescendant(element) {
+      if (element) {
+        const descendants = element.querySelectorAll(
+          focusableCandidateSelectors
+        );
+        for (const el of descendants) {
+          if (attemptFocus(el)) break;
         }
       }
     }
-  }
-  function transitionend(e) {
-    const node = e.target;
-    focusFirstFocusableDescendant(node);
-  }
-  function modalAction(node) {
-    const returnFn = [];
+
+    function focusLastDescendant(element) {
+      if (element) {
+        const descendants = element.querySelectorAll(
+          focusableCandidateSelectors
+        );
+        for (let i = descendants.length - 1; i >= 0; i--) {
+          if (attemptFocus(descendants[i])) break;
+        }
+      }
+    }
+
+    function trapFocus(event) {
+      if (!ignoresFocusChange) {
+        if (dialogNode.contains(event.target)) {
+          lastFocus = event.target;
+        } else {
+          focusFirstDescendant(dialogNode);
+          if (lastFocus === document.activeElement) {
+            focusLastDescendant(dialogNode);
+          }
+          lastFocus = document.activeElement;
+        }
+      }
+    }
+
+    function keydown(e) {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        close();
+      }
+    }
+
+    let original;
     // for accessibility
     if (document.body.style.overflow !== "hidden") {
-      const original = document.body.style.overflow;
+      original = document.body.style.overflow;
       document.body.style.overflow = "hidden";
-      returnFn.push(() => {
-        document.body.style.overflow = original;
-      });
     }
+    document.addEventListener("focus", trapFocus, true);
     node.addEventListener("keydown", keydown);
-    node.addEventListener("transitionend", transitionend);
-    focusFirstFocusableDescendant(node);
-    modalList.push(node);
-    returnFn.push(() => {
-      node.removeEventListener("keydown", keydown);
-      node.removeEventListener("transitionend", transitionend);
-      modalList.pop();
-      focusFirstFocusableDescendant(modalList[modalList.length - 1]);
-    });
+    focusFirstDescendant(node);
     return {
-      destroy: () => returnFn.forEach((fn) => fn()),
+      destroy() {
+        if (original) {
+          document.body.style.overflow = original;
+        }
+        document.removeEventListener("focus", trapFocus, true);
+        node.removeEventListener("keydown", keydown);
+        focusAfterClosed.focus();
+      },
     };
   }
 </script>
@@ -69,7 +110,13 @@
   <button on:click={open}>Open</button>
 </slot>
 {#if $isOpen}
-  <div class="modal" use:modalAction>
+  <!-- Bracket the dialog node with two invisible, focusable nodes (<div tablindex="0" />).
+  While this dialog is open, we use these to make sure that focus never
+  leaves the document even if dialogNode is the first or last node.
+  -->
+  <div tabindex="0" />
+
+  <div class="modal" bind:this={dialogNode} use:modalAction>
     <div class="backdrop" on:click={close} />
 
     <div class="content-wrapper">
@@ -93,6 +140,8 @@
       </slot>
     </div>
   </div>
+
+  <div tabindex="0" />
 {/if}
 
 <style>
@@ -107,10 +156,6 @@
     justify-content: center;
     align-items: center;
     opacity: 1;
-  }
-  div.modal:not(:focus-within) {
-    transition: opacity 0.1ms;
-    opacity: 0.99;
   }
   div.backdrop {
     background-color: rgba(0, 0, 0, 0.4);
