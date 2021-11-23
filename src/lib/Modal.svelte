@@ -15,34 +15,28 @@
       close();
     }
   }
-  function isFocusable(el) {
-    try {
-      el.focus();
-    } catch {}
-    return document.activeElement === el;
-  }
-  function isHidden(el) {
-    const style = window.getComputedStyle(el);
-    return (
-      style.display === "none" ||
-      style.visibility === "hidden" ||
-      style.opacity === "0"
-    );
-  }
-  function focusFirstChild(modal) {
+  function focusFirstFocusableDescendant(modal) {
     if (modal) {
-      const children = modal.querySelectorAll("*");
-      const child = [...children].find(
-        (el) => isFocusable(el) && !isHidden(el)
-      );
-      // We assert child !== null here since
-      // Modal dialogs should contain at least one focusable element.
-      child.focus();
+      // Use '*' here if all tags must be covered, for example `div` with
+      // tabindex attribute. However it increases focus trials before
+      // finding the first focusable element.
+      //
+      // Or add tag type which you use in modals dialogs.
+      for (const el of modal.querySelectorAll(
+        "a, area, button, input, select, textarea, video"
+      )) {
+        try {
+          el.focus();
+        } catch {}
+        if (document.activeElement === el) {
+          break;
+        }
+      }
     }
   }
   function transitionend(e) {
     const node = e.target;
-    focusFirstChild(node);
+    focusFirstFocusableDescendant(node);
   }
   function modalAction(node) {
     const returnFn = [];
@@ -56,13 +50,13 @@
     }
     node.addEventListener("keydown", keydown);
     node.addEventListener("transitionend", transitionend);
-    focusFirstChild(node);
+    focusFirstFocusableDescendant(node);
     modalList.push(node);
     returnFn.push(() => {
       node.removeEventListener("keydown", keydown);
       node.removeEventListener("transitionend", transitionend);
       modalList.pop();
-      focusFirstChild(modalList[modalList.length - 1]);
+      focusFirstFocusableDescendant(modalList[modalList.length - 1]);
     });
     return {
       destroy: () => returnFn.forEach((fn) => fn()),

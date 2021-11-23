@@ -6,10 +6,8 @@ This example is slightly modified from [How to create a Full-Featured Modal Comp
     * This is needed for a transitioned event to be fired when the tab key is pressed
       after the last child in the topmost Modal is focused.
     * This hack is used in the last example of [A CSS Approach to Trap Focus Inside of an Element | CSS-Tricks](https://css-tricks.com/a-css-approach-to-trap-focus-inside-of-an-element/)
-* Focus the first focusable and visible child when a Modal is opened.
-    * `isFocusable` function in this example is based on 
+* Focus the first focusable descendant element when a Modal is opened.
+    * `focusFirstFocusableDescendant` function in this example uses the same way as in
       [dialog.js](https://www.w3.org/TR/wai-aria-practices-1.1/examples/dialog-modal/js/dialog.js) in
       [Modal Dialog Example | WAI-ARIA Authoring Practices 1.1](https://www.w3.org/TR/wai-aria-practices-1.1/examples/dialog-modal/dialog.html).
-      It actually tries to focus in `try catch` then checks `document.activeElement`.
-    * `isHidden` function in this example is taken from [Get only visible element using pure javascript | Newbedev](https://newbedev.com/get-only-visible-element-using-pure-javascript).
-      It checks the style value using `window.getComputedStyle`.
+      It actually tries to focus an element in `try catch` then checks whether `document.activeElement` becomes the element.
